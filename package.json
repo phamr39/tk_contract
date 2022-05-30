@@ -1,0 +1,8 @@
+{
+  "name": "lottery_contract",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "rustup target add wasm32-unknown-unknown && cargo build --target wasm32-unknown-unknown --release",
+    "postbuild": "cp ./target/wasm32-unknown-unknown/release/lottery_contract.wasm ./res/"
+  }
+}
