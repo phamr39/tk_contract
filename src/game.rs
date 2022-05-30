@@ -93,6 +93,40 @@ impl Contract {
         };
     }
 
+    pub fn get_current_game(&mut self) -> GameResponse {
+        let game_id = self.lottery_games.get(&CURRENT_GAME_ID.to_string()).unwrap();
+        let game = self.game_metadata.get(&game_id);
+        assert!(game.is_some(), "Game does not exist!");
+
+        let res_game = game.unwrap();
+
+        return GameResponse {
+            id: res_game.id,
+            start_at: res_game.start_at,
+            end_at: res_game.end_at,
+            participants_number: res_game.participants.len(),
+            fee: res_game.fee,
+            winner: res_game.winner,
+        };
+    }
+
+    pub fn get_previous_game(&mut self) -> GameResponse {
+        let game_id = self.lottery_games.get(&PREVIOUS_GAME_ID.to_string()).unwrap();
+        let game = self.game_metadata.get(&game_id);
+        assert!(game.is_some(), "Game does not exist!");
+
+        let res_game = game.unwrap();
+
+        return GameResponse {
+            id: res_game.id,
+            start_at: res_game.start_at,
+            end_at: res_game.end_at,
+            participants_number: res_game.participants.len(),
+            fee: res_game.fee,
+            winner: res_game.winner,
+        };
+    }
+
     pub fn buy_ticket(&mut self, num: i32) -> User {
         let current_game_id = self.lottery_games.get(&CURRENT_GAME_ID.to_string()).unwrap();
         let mut current_game = self.game_metadata.get(&current_game_id).unwrap();
