@@ -15,7 +15,8 @@ pub struct GameResponse {
     pub end_at: u64,
     pub participants_number: usize,
     pub fee: Balance,
-    pub winner: User,
+    pub winners: Vec<AccountId>,
+    pub winner_number: i32,
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone)]
@@ -23,7 +24,7 @@ pub struct GameResponse {
 pub struct User {
     pub id: AccountId,
     pub number: i32,
-    pub participate_at: u64,
+    // pub participate_at: u64,
 }
 
 impl User {
@@ -31,7 +32,7 @@ impl User {
         Self {
             id: env::signer_account_id(),
             number: num,
-            participate_at: env::block_timestamp(),
+            // participate_at: env::block_timestamp(),
         }
     }
 }
@@ -44,7 +45,8 @@ pub struct GameMetaData {
     pub end_at: u64,
     pub participants: Vec<User>,
     pub fee: Balance,
-    pub winner: User,
+    pub winners: Vec<AccountId>,
+    pub winner_number: i32,
 }
 
 impl GameMetaData {
@@ -55,7 +57,8 @@ impl GameMetaData {
             end_at: 0_u64,
             participants: Vec::new(),
             fee: JOIN_DEFAULT_FEE,
-            winner: User::new(101),
+            winners: Vec::new(),
+            winner_number: 100,
         }
     }
 }
@@ -70,9 +73,18 @@ impl Contract {
                 "Sorry, you have no permission to access this service"
             );
         }
+
+        let current_game_id = self
+            .lottery_games
+            .get(&CURRENT_GAME_ID.to_string())
+            .unwrap();
+        if current_game_id != String::from("") {
+            assert!(false, "Please close the current game before create new");
+        }
         let game = GameMetaData::new();
         let game_id = game.clone().id;
-        self.lottery_games.insert(&CURRENT_GAME_ID.to_string(), &game_id);
+        self.lottery_games
+            .insert(&CURRENT_GAME_ID.to_string(), &game_id);
         self.game_metadata.insert(&game_id, &game);
         return game_id;
     }
@@ -89,12 +101,16 @@ impl Contract {
             end_at: res_game.end_at,
             participants_number: res_game.participants.len(),
             fee: res_game.fee,
-            winner: res_game.winner,
+            winners: res_game.winners,
+            winner_number: res_game.winner_number,
         };
     }
 
     pub fn get_current_game(&mut self) -> GameResponse {
-        let game_id = self.lottery_games.get(&CURRENT_GAME_ID.to_string()).unwrap();
+        let game_id = self
+            .lottery_games
+            .get(&CURRENT_GAME_ID.to_string())
+            .unwrap();
         let game = self.game_metadata.get(&game_id);
         assert!(game.is_some(), "Game does not exist!");
 
@@ -106,12 +122,16 @@ impl Contract {
             end_at: res_game.end_at,
             participants_number: res_game.participants.len(),
             fee: res_game.fee,
-            winner: res_game.winner,
+            winners: res_game.winners,
+            winner_number: res_game.winner_number,
         };
     }
 
     pub fn get_previous_game(&mut self) -> GameResponse {
-        let game_id = self.lottery_games.get(&PREVIOUS_GAME_ID.to_string()).unwrap();
+        let game_id = self
+            .lottery_games
+            .get(&PREVIOUS_GAME_ID.to_string())
+            .unwrap();
         let game = self.game_metadata.get(&game_id);
         assert!(game.is_some(), "Game does not exist!");
 
@@ -123,13 +143,26 @@ impl Contract {
             end_at: res_game.end_at,
             participants_number: res_game.participants.len(),
             fee: res_game.fee,
-            winner: res_game.winner,
+            winners: res_game.winners,
+            winner_number: res_game.winner_number,
         };
     }
 
+    #[payable]
     pub fn buy_ticket(&mut self, num: i32) -> User {
-        let current_game_id = self.lottery_games.get(&CURRENT_GAME_ID.to_string()).unwrap();
+        if env::current_account_id() == env::signer_account_id() {
+            assert!(false, "Owner can not join the game!");
+        }
+        let current_game_id = self
+            .lottery_games
+            .get(&CURRENT_GAME_ID.to_string())
+            .unwrap();
         let mut current_game = self.game_metadata.get(&current_game_id).unwrap();
+        for participant in current_game.participants.iter() {
+            if participant.id == env::signer_account_id() {
+                assert!(false, "You have already bought this ticket!");
+            }
+        }
         let dep = env::attached_deposit();
         if dep < current_game.fee {
             assert!(false, "Not Enough Fee!");
@@ -144,33 +177,45 @@ impl Contract {
     }
 
     #[payable]
-    pub fn end_game(&mut self) -> User {
-        let current_game_id = self.lottery_games.get(&CURRENT_GAME_ID.to_string()).unwrap();
+    pub fn end_game(&mut self) -> Vec<AccountId> {
+        let current_game_id = self
+            .lottery_games
+            .get(&CURRENT_GAME_ID.to_string())
+            .unwrap();
         let mut current_game = self.game_metadata.get(&current_game_id).unwrap();
         let dec_number: u64 = env::block_timestamp() / 100;
         let number_str = (env::block_timestamp() - dec_number * 100).to_string();
-        let winner_number:i32 = number_str.parse::<i32>().unwrap();
-        let mut cr_winner: &User = &User { id: self.owner_id.clone(), number: 100, participate_at: env::block_timestamp() };
+        let winner_number: i32 = number_str.parse::<i32>().unwrap();
+        let mut winners_vec: Vec<AccountId> = Vec::new();
         for participant in current_game.participants.iter() {
-            if participant.number == winner_number && participant.participate_at < cr_winner.participate_at {
-                cr_winner = participant;
+            if participant.number == winner_number {
+                winners_vec.push(participant.clone().id);
             }
         }
-
-        let res = cr_winner.clone();
-        let winner = cr_winner.clone();
-        if winner.id != self.owner_id.clone() {
-            let u128_num_of_partis: u128 = current_game.participants.len().to_string().parse::<u128>().unwrap();
+        if winners_vec.clone().len() > 0 {
+            let u128_num_of_partis: u128 = current_game
+                .participants
+                .len()
+                .to_string()
+                .parse::<u128>()
+                .unwrap();
             let percent = &REWARD_PERCENT.to_string().parse::<u128>().unwrap();
             let hundred: u128 = "100".parse::<u128>().unwrap();
             let reward_amount: u128 = (current_game.fee * u128_num_of_partis) * percent / hundred;
-            Promise::new(winner.id).transfer(reward_amount);
+            let total_winner_amount: u128 = winners_vec.len().to_string().parse::<u128>().unwrap();
+            let user_payment_amount: u128 = reward_amount / total_winner_amount;
+            for winner in winners_vec.clone() {
+                Promise::new(winner).transfer(user_payment_amount);
+            }
         }
-        current_game.winner = cr_winner.clone();
+        current_game.winners = winners_vec.clone();
+        current_game.winner_number = winner_number;
+        current_game.end_at = env::block_timestamp();
         self.game_metadata.insert(&current_game.id, &current_game);
-        self.lottery_games.insert(&CURRENT_GAME_ID.to_string(), &String::from(""));
-        self.lottery_games.insert(&PREVIOUS_GAME_ID.to_string(), &current_game.id);
-        return res;
+        self.lottery_games
+            .insert(&CURRENT_GAME_ID.to_string(), &String::from(""));
+        self.lottery_games
+            .insert(&PREVIOUS_GAME_ID.to_string(), &current_game.id);
+        return winners_vec.clone();
     }
-
 }
