@@ -106,6 +106,19 @@ impl Contract {
         };
     }
 
+    pub fn get_user_ticket(&mut self, id: String, user_id: AccountId) -> i32 {
+        let game = self.game_metadata.get(&id);
+        assert!(game.is_some(), "Game does not exist!");
+        let res_game = game.unwrap();
+        for participant in res_game.participants.iter() {
+            if participant.id == user_id {
+                return participant.number;
+            }
+        }
+        return 100;
+    }
+
+
     pub fn get_current_game(&mut self) -> GameResponse {
         let game_id = self
             .lottery_games
