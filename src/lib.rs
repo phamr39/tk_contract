@@ -21,7 +21,6 @@ mod utils;
 #[derive(BorshDeserialize, BorshSerialize, PanicOnDefault)]
 pub struct Contract {
     pub owner_id: AccountId,
-    // pub players_in_game: LookupMap<PlayerId, UnorderedSet<AccountId>>,
     pub lottery_games: LookupMap<String, String>,
     pub game_metadata: UnorderedMap<GameId, GameMetaData>,
 }
@@ -32,7 +31,6 @@ impl Contract {
     pub fn new() -> Self {
         Self {
             owner_id: env::current_account_id(),
-            // players_in_game: LookupMap::new(StorageKey::PlayerInGame),
             lottery_games: LookupMap::new(StorageKey::LotteryGame),
             game_metadata: UnorderedMap::new(StorageKey::GameMetadata),
         }
