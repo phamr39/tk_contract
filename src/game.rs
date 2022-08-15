@@ -65,22 +65,7 @@ impl GameMetaData {
 
 #[near_bindgen]
 impl Contract {
-    pub fn new_game(&mut self) -> GameId {
-        let owner = env::current_account_id();
-        if owner != env::signer_account_id() {
-            assert!(
-                false,
-                "Sorry, you have no permission to access this service"
-            );
-        }
-
-        let current_game_id = self
-            .lottery_games
-            .get(&CURRENT_GAME_ID.to_string())
-            .unwrap();
-        if current_game_id != String::from("") {
-            assert!(false, "Please close the current game before create new");
-        }
+    fn new_game(&mut self) -> GameId {
         let game = GameMetaData::new();
         let game_id = game.clone().id;
         self.lottery_games
@@ -117,7 +102,6 @@ impl Contract {
         }
         return 100;
     }
-
 
     pub fn get_current_game(&mut self) -> GameResponse {
         let game_id = self
@@ -186,11 +170,14 @@ impl Contract {
         let user = User::new(num);
         current_game.participants.push(user.clone());
         self.game_metadata.insert(&current_game_id, &current_game);
+        if current_game.participants.len() == 2 {
+            self.end_game();
+        }
         return user;
     }
 
     #[payable]
-    pub fn end_game(&mut self) -> Vec<AccountId> {
+    fn end_game(&mut self) -> Vec<AccountId> {
         let current_game_id = self
             .lottery_games
             .get(&CURRENT_GAME_ID.to_string())
@@ -220,15 +207,25 @@ impl Contract {
             for winner in winners_vec.clone() {
                 Promise::new(winner).transfer(user_payment_amount);
             }
+        } else {
+            let current_participant = &current_game.participants;
+            for player in current_participant.clone() {
+                Promise::new(player.id).transfer(EXECUTION_CASH_BACK_FEE);
+            }
         }
         current_game.winners = winners_vec.clone();
         current_game.winner_number = winner_number;
         current_game.end_at = env::block_timestamp();
         self.game_metadata.insert(&current_game.id, &current_game);
-        self.lottery_games
-            .insert(&CURRENT_GAME_ID.to_string(), &String::from(""));
+
         self.lottery_games
             .insert(&PREVIOUS_GAME_ID.to_string(), &current_game.id);
+        // Create new Game
+        self.new_game();
+
+        // Send back 0.5 Near as execution fee for the user who call this method
+        Promise::new(env::signer_account_id()).transfer(EXECUTION_CASH_BACK_FEE);
+
         return winners_vec.clone();
     }
 }
